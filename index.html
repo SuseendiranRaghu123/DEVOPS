@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Simon Says Game (Keyboard)</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #1e272e;
+      color: white;
+      text-align: center;
+      padding: 30px;
+    }
+
+    h1 {
+      font-size: 3rem;
+      margin-bottom: 10px;
+    }
+
+    #startBtn {
+      background-color: #00b894;
+      color: white;
+      border: none;
+      padding: 15px 30px;
+      font-size: 1.2rem;
+      border-radius: 10px;
+      cursor: pointer;
+      margin-top: 20px;
+    }
+
+    #startBtn:hover {
+      background-color: #019875;
+    }
+
+    #game-container {
+      display: grid;
+      grid-template-columns: repeat(2, 150px);
+      grid-template-rows: repeat(2, 150px);
+      gap: 20px;
+      justify-content: center;
+      margin-top: 40px;
+    }
+
+    .simon-button {
+      width: 150px;
+      height: 150px;
+      border-radius: 20px;
+      transition: transform 0.1s, opacity 0.1s;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      font-size: 1.5rem;
+      font-weight: bold;
+      color: black;
+    }
+
+    .simon-button:active {
+      transform: scale(0.95);
+    }
+
+    #green    { background-color: #2ecc71; }
+    #red      { background-color: #e74c3c; }
+    #yellow   { background-color: #f1c40f; }
+    #blue     { background-color: #3498db; }
+
+    .flash {
+      opacity: 0.5 !important;
+    }
+
+    #level-display, #scoreboard {
+      font-size: 1.5rem;
+      margin-top: 20px;
+    }
+
+    #scoreboard {
+      margin-top: 10px;
+      font-size: 1.2rem;
+    }
+
+    #features {
+      margin-top: 40px;
+      text-align: left;
+      max-width: 700px;
+      margin-left: auto;
+      margin-right: auto;
+      font-size: 1rem;
+      background: #2f3640;
+      padding: 20px;
+      border-radius: 10px;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>Simon Says</h1>
+  <p>Use keyboard: <b>W</b> (Green), <b>Shift</b> (Red), <b>A</b> (Yellow), <b>D</b> (Blue)</p>
+  <button id="startBtn">Start Game</button>
+  <div id="level-display"></div>
+  <div id="scoreboard">Commissions: <span id="commissionCount">0</span></div>
+
+  <div id="game-container">
+    <div class="simon-button" id="green">W</div>
+    <div class="simon-button" id="red">Shift</div>
+    <div class="simon-button" id="yellow">A</div>
+    <div class="simon-button" id="blue">D</div>
+  </div>
+
+  <div id="features"></div>
+
+  <script>
+    // --- Game setup ---
+    const colors = ["green", "red", "yellow", "blue"];
+    const keyMap = { w: "green", shift: "red", a: "yellow", d: "blue" };
+    const gameLogs = [];
+    let round = 0, totalRounds = 100;
+    let currentColor = "";
+    let started = false;
+    let commission = 0;
+    let startTime = 0;
+    let omissionTimeout = null;
+    let hasResponded = false;
+
+    // --- DOM elements ---
+    const levelDisplay    = document.getElementById("level-display");
+    const commissionCount = document.getElementById("commissionCount");
+    const startBtn        = document.getElementById("startBtn");
+    const featureDisplay  = document.getElementById("features");
+
+    // --- Visual flash ---
+    function flashButton(color) {
+      const btn = document.getElementById(color);
+      btn.classList.add("flash");
+      setTimeout(() => btn.classList.remove("flash"), 300);
+    }
+
+    // --- Next round logic ---
+    function nextRound() {
+      if (round >= totalRounds) {
+        endGame();
+        return;
+      }
+      round++;
+      levelDisplay.textContent = `Round ${round}/${totalRounds}`;
+      currentColor = colors[Math.floor(Math.random() * colors.length)];
+      flashButton(currentColor);
+      startTime = performance.now();
+      hasResponded = false;
+
+      // start 1.5s omission timer:
+      omissionTimeout = setTimeout(() => {
+        if (!hasResponded) {
+          // log omission
+          gameLogs.push({
+            sessionId: "HTMLSession",
+            expectedButton: currentColor,
+            clickedButton: "None",
+            correct: false,
+            timeClicked: -1
+          });
+          // next
+          currentColor = "";
+          setTimeout(nextRound, 500);
+        }
+      }, 1500);
+    }
+
+    // --- End game and show features ---
+    function endGame() {
+      started = false;
+      levelDisplay.textContent = "Game Over!";
+      clearTimeout(omissionTimeout);
+      const features = calculateMetrics(gameLogs, 1, 14);
+      featureDisplay.innerHTML = formatFeaturesHTML(features);
+    }
+
+    // --- Key handler ---
+    document.addEventListener("keydown", (e) => {
+      if (!started || !currentColor) return;
+      const key = e.key.toLowerCase();
+      const clickedColor = keyMap[key] || "None";
+
+      // only first response counts:
+      if (hasResponded) return;
+      hasResponded = true;
+      clearTimeout(omissionTimeout);
+
+      const timeClicked = (performance.now() - startTime) / 1000;
+      const correct = clickedColor === currentColor;
+      if (!correct && clickedColor !== "None") commission++;
+
+      gameLogs.push({
+        sessionId: "HTMLSession",
+        expectedButton: currentColor,
+        clickedButton: clickedColor,
+        correct,
+        timeClicked
+      });
+
+      commissionCount.textContent = commission;
+      currentColor = "";
+      setTimeout(nextRound, 500);
+    });
+
+    // --- Start button ---
+    startBtn.addEventListener("click", () => {
+      if (!started) {
+        gameLogs.length = 0;
+        round = 0;
+        commission = 0;
+        started = true;
+        commissionCount.textContent = commission;
+        featureDisplay.innerHTML = "";
+        levelDisplay.textContent = "Get Ready...";
+        setTimeout(nextRound, 1000);
+      }
+    });
+
+    // ========== Feature Extraction ==========
+    function calculateMetrics(logs, sex = 1, age = 14) {
+      const totalTrials   = logs.length;
+      const omissions     = logs.filter(e => e.clickedButton === "None").length;
+      const commissions   = logs.filter(e => e.clickedButton !== e.expectedButton && !e.correct && e.clickedButton !== "None").length;
+
+      const hitLogs = logs.filter(e => e.correct);
+      const rtList  = hitLogs.map(e => e.timeClicked).filter(rt => rt > 0);
+      const meanRT  = rtList.length ? average(rtList) : 0;
+      const stdDev  = rtList.length ? standardDeviation(rtList) : 0;
+      const perseverations = logs.filter(e => e.timeClicked > 0 && e.timeClicked < 0.1).length;
+
+      // ISI
+      const isiList = rtList.slice(1).map((rt,i) => rt - rtList[i]);
+      const isiMean = isiList.length ? average(isiList) : 0;
+      const isiSE   = isiList.length > 1 ? standardDeviation(isiList) : 0;
+
+      // Blocks
+      const blockSize = 5;
+      const rtBlocks = [], seBlocks = [];
+      for (let i=0; i<rtList.length; i+=blockSize) {
+        const blk = rtList.slice(i,i+blockSize);
+        if (blk.length) {
+          rtBlocks.push(average(blk));
+          seBlocks.push(standardDeviation(blk));
+        }
+      }
+      const hitRTBlock = rtBlocks.length ? average(rtBlocks) : 0;
+      const hitSEBlock = seBlocks.length ? average(seBlocks) : 0;
+      const varSE      = seBlocks.length > 1 ? standardDeviation(seBlocks) : 0;
+
+      let hitRate = hitLogs.length / totalTrials;
+      let faRate  = commissions / totalTrials;
+      hitRate = clamp(hitRate, 0.01, 0.99);
+      faRate  = clamp(faRate, 0.01, 0.99);
+
+      const zH = zScore(hitRate), zF = zScore(faRate);
+      const dPrime = zH - zF;
+      const beta   = Math.exp((zF*zF - zH*zH)/2);
+
+      return { totalTrials, omissions, commissions,
+               hitRT: meanRT, hitSE: stdDev,
+               perseverations, hitRTBlock, hitSEBlock,
+               varSE, dPrime, beta,
+               hitRTISI: isiMean, hitSEISI: isiSE,
+               sex, age };
+    }
+
+    // helpers
+    function average(a){return a.reduce((x,y)=>x+y,0)/a.length;}
+    function standardDeviation(a){const m=average(a);return Math.sqrt(average(a.map(x=>Math.pow(x-m,2))));}
+    function clamp(v,min,max){return Math.max(min,Math.min(max,v));}
+    function zScore(p){return Math.sqrt(2)*erfInv(2*p-1);}
+    function erfInv(x){
+      const a=0.147, ln=Math.log(1-x*x);
+      const f=(2/(Math.PI*a))+(ln/2), s=ln/a;
+      return Math.sign(x)*Math.sqrt(Math.sqrt(f*f - s)-f);
+    }
+
+    // pretty-print
+    function formatFeaturesHTML(feat) {
+  const rows = Object.entries(feat).map(
+    ([key, val]) => `
+      <tr>
+        <td>${key}</td>
+        <td>${typeof val === 'number' ? val.toFixed(4) : val}</td>
+      </tr>`
+  ).join("");
+
+  return `
+    <h2 style="text-align: center; margin-bottom: 20px;">Extracted Features</h2>
+    <table style="width: 100%; border-collapse: collapse; font-size: 1rem;">
+      <thead>
+        <tr style="background-color: #57606f;">
+          <th style="padding: 10px; border: 1px solid #ccc;">Feature</th>
+          <th style="padding: 10px; border: 1px solid #ccc;">Value</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rows}
+      </tbody>
+    </table>`;
+}
+
+  </script>
+</body>
+</html>
