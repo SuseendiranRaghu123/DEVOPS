@@ -1,0 +1,19 @@
+# Create custom Prometheus metrics (e.g., a counter for API calls)
+REQUESTS = Counter('http_requests_total', 'Total HTTP Requests', ['method', 'endpoint'])
+REQUEST_LATENCY = Histogram('http_request_duration_seconds', 'HTTP Request Latency', ['method', 'endpoint'])
+
+# Instrument FastAPI with Prometheus (this will automatically collect default metrics)
+instrumentator = Instrumentator()
+instrumentator.instrument(app).expose(app, "/metrics")
+
+# Example endpoint to simulate request tracking
+@app.get("/example")
+async def example_endpoint():
+    with REQUEST_LATENCY.labels(method="GET", endpoint="/example").time():
+        REQUESTS.labels(method="GET", endpoint="/example").inc()  # Increment counter
+        return {"message": "Hello, world!"}
+
+# Custom metrics endpoint
+@app.get("/metrics")
+async def metrics():
+    return generate_latest()  # Expose Prometheus metrics
